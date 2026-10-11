@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Ansible
+*.retry
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
