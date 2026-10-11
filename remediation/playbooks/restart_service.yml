@@ -1,0 +1,24 @@
+---
+# Remediation: restart the unhealthy service's container.
+# In demo_mode the real action is skipped and only logged, so the full
+# alert -> webhook -> playbook chain can run safely in CI.
+
+- name: Restart unhealthy service
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    demo_mode: true
+    target_service: app
+    container_name: "{{ target_service }}"
+  tasks:
+    - name: Log remediation intent
+      ansible.builtin.debug:
+        msg: "Remediation restart_service for '{{ container_name }}' (demo_mode={{ demo_mode }})"
+
+    - name: Restart the target container
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        state: started
+        restart: true
+      when: not (demo_mode | bool)

@@ -1,0 +1,35 @@
+---
+# Remediation: scale out the service under load.
+# Demo implementation increases a desired-replicas marker; in a real
+# environment this would call `docker compose up --scale` or patch a
+# Kubernetes Deployment's replica count.
+
+- name: Scale out service
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    demo_mode: true
+    target_service: app
+    scale_step: 1
+    state_file: "/tmp/remediation_{{ target_service }}_replicas"
+  tasks:
+    - name: Read current desired replicas
+      ansible.builtin.slurp:
+        src: "{{ state_file }}"
+      register: _current
+      failed_when: false
+
+    - name: Compute new replica count
+      ansible.builtin.set_fact:
+        _replicas: "{{ ((_current.content | default('MQ==') | b64decode | trim | int) + scale_step) }}"
+
+    - name: Log remediation intent
+      ansible.builtin.debug:
+        msg: "Remediation scale_service for '{{ target_service }}' -> {{ _replicas }} replicas (demo_mode={{ demo_mode }})"
+
+    - name: Record new desired replica count
+      ansible.builtin.copy:
+        dest: "{{ state_file }}"
+        content: "{{ _replicas }}\n"
+        mode: "0644"

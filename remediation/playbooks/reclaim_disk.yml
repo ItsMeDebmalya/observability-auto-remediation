@@ -1,0 +1,27 @@
+---
+# Remediation: reclaim disk space when a filesystem fills up.
+# Demo implementation reports what it would clean; the real action prunes
+# dangling Docker data and clears the apt cache / old logs.
+
+- name: Reclaim disk space
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    demo_mode: true
+    target_service: node
+  tasks:
+    - name: Log remediation intent
+      ansible.builtin.debug:
+        msg: "Remediation reclaim_disk on '{{ target_service }}' (demo_mode={{ demo_mode }})"
+
+    - name: Prune dangling Docker data
+      ansible.builtin.command: docker system prune -f
+      register: _prune
+      changed_when: "'Total reclaimed space' in _prune.stdout"
+      when: not (demo_mode | bool)
+
+    - name: Vacuum journald logs older than 2 days
+      ansible.builtin.command: journalctl --vacuum-time=2d
+      changed_when: false
+      when: not (demo_mode | bool)
