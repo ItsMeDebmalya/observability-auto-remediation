@@ -1,0 +1,103 @@
+---
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate configs, lint & unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r app/requirements.txt -r webhook/requirements.txt \
+            ruff pytest ansible-lint
+          ansible-galaxy collection install community.docker
+
+      - name: Lint (ruff)
+        run: ruff check app webhook
+
+      - name: Unit tests (webhook -> ansible chain, demo mode)
+        run: python -m pytest webhook/tests -q
+
+      - name: ansible-lint remediation playbooks
+        run: ansible-lint remediation/playbooks
+
+      - name: Validate Prometheus config & rules (promtool)
+        run: |
+          docker run --rm -v "$PWD/prometheus:/etc/prometheus" \
+            --entrypoint promtool prom/prometheus:v2.54.1 \
+            check config /etc/prometheus/prometheus.yml
+
+      - name: Validate Alertmanager config (amtool)
+        run: |
+          docker run --rm -v "$PWD/alertmanager:/etc/alertmanager" \
+            --entrypoint amtool prom/alertmanager:v0.27.0 \
+            check-config /etc/alertmanager/alertmanager.yml
+
+      - name: Validate docker-compose
+        run: docker compose config >/dev/null
+
+  integration:
+    name: Live alert -> auto-remediation loop
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and start the core stack (demo mode)
+        env:
+          DEMO_MODE: "true"
+        run: |
+          docker compose up -d --build \
+            app node-exporter prometheus alertmanager remediation-webhook
+
+      - name: Wait for services to be ready
+        run: |
+          ready() { curl -sf "$1" >/dev/null 2>&1; }
+          for svc in \
+            "http://localhost:8080/healthz" \
+            "http://localhost:9090/-/ready" \
+            "http://localhost:9093/-/ready" \
+            "http://localhost:5001/healthz"; do
+            echo "waiting for $svc"
+            for i in $(seq 1 30); do ready "$svc" && break; sleep 2; done
+            ready "$svc" || { echo "NOT READY: $svc"; docker compose logs; exit 1; }
+          done
+          echo "all core services ready"
+
+      - name: Confirm Prometheus loaded the alert rules
+        run: |
+          curl -s http://localhost:9090/api/v1/rules | jq -e \
+            '[.data.groups[].rules[].name] | index("AppUnhealthy")' >/dev/null
+          echo "alert rules loaded"
+
+      - name: Trigger an outage and wait for auto-remediation
+        run: |
+          # Mark the app unhealthy; AppUnhealthy fires and Alertmanager calls
+          # the remediation webhook, which runs the restart_service playbook.
+          curl -s http://localhost:8080/fail/300 >/dev/null
+          echo "app marked unhealthy; waiting for remediation..."
+          for i in $(seq 1 60); do
+            runs=$(curl -s http://localhost:5001/stats | jq -r '.runs.restart_service')
+            echo "attempt $i: restart_service runs=$runs"
+            [ "$runs" != "0" ] && [ "$runs" != "null" ] && { echo "AUTO-REMEDIATION FIRED"; exit 0; }
+            sleep 5
+          done
+          echo "remediation did not fire in time"; docker compose logs alertmanager remediation-webhook; exit 1
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
