@@ -1,0 +1,43 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "schemaVersion": 39,
+  "title": "Service Overview",
+  "tags": ["sample-app", "observability"],
+  "time": { "from": "now-15m", "to": "now" },
+  "timezone": "browser",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "App healthy",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "targets": [{ "expr": "app_healthy", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" } } },
+            { "type": "value", "options": { "1": { "text": "UP", "color": "green" } } }
+          ]
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Request rate (per endpoint)",
+      "gridPos": { "h": 8, "w": 12, "x": 6, "y": 0 },
+      "targets": [{ "expr": "app:requests:rate5m", "legendFormat": "{{endpoint}}", "refId": "A" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "p95 latency",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [{ "expr": "app:latency:p95_5m", "legendFormat": "p95", "refId": "A" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Root filesystem used ratio",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [{ "expr": "node:fs_used:ratio{mountpoint=\"/\"}", "legendFormat": "/", "refId": "A" }]
+    }
+  ]
+}
