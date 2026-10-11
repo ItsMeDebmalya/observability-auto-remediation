@@ -1,0 +1,50 @@
+groups:
+  - name: sample-app-alerts
+    rules:
+      # Service reports itself unhealthy -> remediation: restart the service.
+      - alert: AppUnhealthy
+        expr: app_healthy == 0
+        for: 30s
+        labels:
+          severity: critical
+          remediation: restart_service
+          target_service: app
+        annotations:
+          summary: "Sample app is unhealthy"
+          description: "app_healthy has been 0 for 30s; restarting the service."
+
+      # Target down -> remediation: restart the service.
+      - alert: AppDown
+        expr: up{job="sample-app"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          remediation: restart_service
+          target_service: app
+        annotations:
+          summary: "Sample app target is down"
+          description: "Prometheus cannot scrape the sample app."
+
+      # High latency -> remediation: scale out.
+      - alert: AppHighLatency
+        expr: app:latency:p95_5m > 0.5
+        for: 2m
+        labels:
+          severity: warning
+          remediation: scale_service
+          target_service: app
+        annotations:
+          summary: "Sample app p95 latency high"
+          description: "p95 latency above 500ms for 2m; scaling out."
+
+      # Disk filling up -> remediation: reclaim disk.
+      - alert: NodeDiskFilling
+        expr: node:fs_used:ratio{mountpoint="/"} > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          remediation: reclaim_disk
+          target_service: node
+        annotations:
+          summary: "Root filesystem above 85%"
+          description: "Disk usage high for 5m; reclaiming space."

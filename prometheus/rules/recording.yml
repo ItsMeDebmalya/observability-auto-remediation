@@ -1,0 +1,15 @@
+groups:
+  - name: sample-app-recording
+    interval: 15s
+    rules:
+      # Request rate per endpoint over 5m.
+      - record: app:requests:rate5m
+        expr: sum by (endpoint) (rate(app_requests_total[5m]))
+
+      # p95 latency over 5m.
+      - record: app:latency:p95_5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(app_request_latency_seconds_bucket[5m])))
+
+      # Node filesystem usage ratio.
+      - record: node:fs_used:ratio
+        expr: 1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)
